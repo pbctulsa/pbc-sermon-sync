@@ -12,6 +12,8 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 
 The sync copies each video's title, description, and YouTube URL. It matches existing episodes by YouTube video ID, making repeated runs safe.
 
+Videos titled exactly `Sunday Service` are excluded from synchronization.
+
 ## GitHub Secrets
 
 Add these secrets under **Settings → Secrets and variables → Actions**:
@@ -31,9 +33,10 @@ Scheduled runs remain disabled until testing is complete. To enable them, create
 1. Open **Actions → YouTube Sermon Sync → Run workflow**.
 2. Leave `dry_run` set to `true`.
 3. Set `publish` to `true` (dry-run mode still prevents changes).
-4. Review the workflow log showing what would be created.
-5. Run it again with `dry_run` set to `false` and `publish` set to `true` to publish the missing episodes.
-6. After confirming they look correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
+4. Leave `max_episodes_per_run` at `10` for normal runs; increase it deliberately for the initial backfill.
+5. Review the workflow log showing what would be created.
+6. Run it again with `dry_run` set to `false` and `publish` set to `true` to publish the missing episodes.
+7. After confirming they look correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
 
 Set `publish` to `true` only when new episodes should immediately appear in Church Center.
 

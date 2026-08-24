@@ -15,6 +15,12 @@ const env = {
   dryRun: isTruthy(process.env.DRY_RUN),
   publishEpisodes: isTruthy(process.env.PUBLISH_EPISODES),
   maxEpisodesPerRun: Number.parseInt(process.env.MAX_EPISODES_PER_RUN || "10", 10),
+  excludedTitles: new Set(
+    (process.env.EXCLUDED_TITLES || "Sunday Service")
+      .split(",")
+      .map((title) => title.trim().toLowerCase())
+      .filter(Boolean),
+  ),
 };
 
 if (isMainModule()) {
@@ -35,7 +41,8 @@ async function main() {
 
   const normalizedVideos = playlistItems
     .map(normalizeYouTubeItem)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((video) => !env.excludedTitles.has(video.title.toLowerCase()));
   const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
 

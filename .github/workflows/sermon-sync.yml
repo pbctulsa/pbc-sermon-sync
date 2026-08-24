@@ -24,6 +24,11 @@ on:
         required: true
         default: "uZGwiTyVMUU"
         type: string
+      max_episodes_per_run:
+        description: "Safety limit (increase deliberately for the first backfill)"
+        required: true
+        default: "10"
+        type: string
   schedule:
     - cron: "0 14 * * *"
 
@@ -40,7 +45,8 @@ jobs:
       SYNC_AFTER_VIDEO_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_after_video_id || 'uZGwiTyVMUU' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
       PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'true' }}
-      MAX_EPISODES_PER_RUN: "10"
+      MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
+      EXCLUDED_TITLES: Sunday Service
 
     steps:
       - name: Check out repository
