@@ -16,6 +16,9 @@ const env = {
   dryRun: isTruthy(process.env.DRY_RUN),
   publishEpisodes: isTruthy(process.env.PUBLISH_EPISODES),
   forceThumbnailBackfill: isTruthy(process.env.FORCE_THUMBNAIL_BACKFILL),
+  thumbnailEpisodeIdMin: process.env.THUMBNAIL_EPISODE_ID_MIN
+    ? Number.parseInt(process.env.THUMBNAIL_EPISODE_ID_MIN, 10)
+    : null,
   maxEpisodesPerRun: Number.parseInt(process.env.MAX_EPISODES_PER_RUN || "10", 10),
   excludedTitles: new Set(
     (process.env.EXCLUDED_TITLES || "Sunday Service")
@@ -47,7 +50,12 @@ async function main() {
     .filter((video) => !env.excludedTitles.has(video.title.toLowerCase()));
   const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
-  const thumbnailUpdates = findThumbnailUpdates(videos, existingEpisodes, env.forceThumbnailBackfill);
+  const thumbnailUpdates = findThumbnailUpdates(
+    videos,
+    existingEpisodes,
+    env.forceThumbnailBackfill,
+    env.thumbnailEpisodeIdMin,
+  );
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
@@ -120,6 +128,10 @@ function validateConfig() {
 
   if (!Number.isInteger(env.maxEpisodesPerRun) || env.maxEpisodesPerRun < 1) {
     throw new Error("MAX_EPISODES_PER_RUN must be a positive integer.");
+  }
+
+  if (env.thumbnailEpisodeIdMin !== null && !Number.isInteger(env.thumbnailEpisodeIdMin)) {
+    throw new Error("THUMBNAIL_EPISODE_ID_MIN must be an integer.");
   }
 }
 
@@ -299,7 +311,7 @@ export function findMissingVideos(videos, episodes) {
     .sort((left, right) => new Date(left.addedToPlaylistAt || 0) - new Date(right.addedToPlaylistAt || 0));
 }
 
-export function findThumbnailUpdates(videos, episodes, force = false) {
+export function findThumbnailUpdates(videos, episodes, force = false, episodeIdMin = null) {
   const videoById = new Map(videos.map((video) => [video.id, video]));
 
   return episodes.flatMap((episode) => {
@@ -309,6 +321,7 @@ export function findThumbnailUpdates(videos, episodes, force = false) {
       .find(Boolean);
     const video = videoById.get(videoId);
 
+    if (episodeIdMin !== null && Number(episode.id) < episodeIdMin) return [];
     if (!video?.thumbnailUrl || (!force && hasEpisodeArt(attributes.art))) return [];
     return [{ video, episode }];
   });

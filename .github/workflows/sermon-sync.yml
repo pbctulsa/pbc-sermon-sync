@@ -37,6 +37,11 @@ on:
         options:
           - "false"
           - "true"
+      thumbnail_episode_id_min:
+        description: "Optional minimum Planning Center episode ID for thumbnail backfill"
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "0 14 * * *"
 
@@ -56,6 +61,7 @@ jobs:
       MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
       EXCLUDED_TITLES: Sunday Service
       FORCE_THUMBNAIL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_thumbnail_backfill || 'false' }}
+      THUMBNAIL_EPISODE_ID_MIN: ${{ github.event_name == 'workflow_dispatch' && inputs.thumbnail_episode_id_min || '' }}
 
     steps:
       - name: Check out repository
