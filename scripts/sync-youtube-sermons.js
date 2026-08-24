@@ -105,10 +105,11 @@ async function fetchYouTubePlaylistItems() {
     url.searchParams.set("part", "snippet,contentDetails,status");
     url.searchParams.set("playlistId", env.youtubePlaylistId);
     url.searchParams.set("maxResults", "50");
-    url.searchParams.set("key", env.youtubeApiKey);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { "X-Goog-Api-Key": env.youtubeApiKey },
+    });
     const page = await parseResponse(response, "YouTube");
     items.push(...(page.items || []));
     pageToken = page.nextPageToken || null;
