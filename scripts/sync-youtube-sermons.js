@@ -5,6 +5,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { XMLParser } from "fast-xml-parser";
 
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 const PLANNING_CENTER_API_URL = "https://api.planningcenteronline.com/publishing/v2";
@@ -16,6 +17,7 @@ const env = {
   planningCenterSecret: process.env.PC_SECRET,
   youtubeApiKey: process.env.YOUTUBE_API_KEY,
   youtubePlaylistId: process.env.YOUTUBE_PLAYLIST_ID,
+  podcastSourceFeedUrl: process.env.PODCAST_SOURCE_FEED_URL || null,
   planningCenterChannelId: process.env.PC_SERMON_CHANNEL_ID,
   syncAfterVideoId: process.env.SYNC_AFTER_VIDEO_ID || null,
   syncNotBefore: process.env.SYNC_NOT_BEFORE || null,
@@ -47,10 +49,11 @@ if (isMainModule()) {
 async function main() {
   validateConfig();
 
-  const [channel, playlistItems, existingEpisodes] = await Promise.all([
+  const [channel, playlistItems, existingEpisodes, podcastSourceEpisodes] = await Promise.all([
     fetchPlanningCenterChannel(),
     fetchYouTubePlaylistItems(),
     fetchPlanningCenterEpisodes(),
+    env.syncPodcastAudio && env.podcastSourceFeedUrl ? fetchPodcastSourceEpisodes(env.podcastSourceFeedUrl) : [],
   ]);
 
   const normalizedVideos = playlistItems
@@ -84,6 +87,9 @@ async function main() {
   }
 
   if (env.syncPodcastAudio) {
+    if (podcastSourceEpisodes.length > 0) {
+      console.log(`Loaded ${podcastSourceEpisodes.length} existing podcast episode(s) as migration audio sources.`);
+    }
     console.log(
       channel.attributes?.podcast_feed_url
         ? `Planning Center podcast feed: ${channel.attributes.podcast_feed_url}`
@@ -152,7 +158,10 @@ async function main() {
       continue;
     }
 
-    const uploadId = await uploadYouTubeAudio(video);
+    const sourceAudioUrl = findPodcastSourceAudioUrl(video.title, podcastSourceEpisodes);
+    const uploadId = sourceAudioUrl
+      ? await uploadRemotePodcastAudio(video, sourceAudioUrl)
+      : await uploadYouTubeAudio(video);
     await updatePlanningCenterEpisodeAudio(episode.id, uploadId);
     console.log(`Added podcast audio to episode ${episode.id}: ${video.title}`);
   }
@@ -169,6 +178,32 @@ async function main() {
     const status = env.publishEpisodes ? "published" : "draft";
     console.log(`Created ${status} episode ${episode.id}: ${video.title}`);
   }
+}
+
+async function fetchPodcastSourceEpisodes(feedUrl) {
+  const response = await fetch(feedUrl);
+  if (!response.ok) throw new Error(`Podcast source feed download failed (${response.status}).`);
+  return parsePodcastFeed(await response.text());
+}
+
+async function uploadRemotePodcastAudio(video, audioUrl) {
+  const audioResponse = await fetch(audioUrl);
+  if (!audioResponse.ok) {
+    throw new Error(`Podcast audio download failed for ${video.id} (${audioResponse.status}).`);
+  }
+
+  const audio = await audioResponse.arrayBuffer();
+  const form = new FormData();
+  form.append("file", new Blob([audio], { type: "audio/mpeg" }), `${video.id}.mp3`);
+
+  const response = await planningCenterRequest(PLANNING_CENTER_UPLOAD_URL, {
+    method: "POST",
+    body: form,
+  });
+  const body = await parseResponse(response, "Planning Center migrated podcast audio upload");
+  const uploadId = body.data?.[0]?.id;
+  if (!uploadId) throw new Error(`Planning Center did not return an audio upload ID for ${video.id}.`);
+  return uploadId;
 }
 
 function validateConfig() {
@@ -515,6 +550,33 @@ export function findPodcastAudioUpdates(videos, episodes) {
     const video = videoById.get(videoId);
     return video ? [{ video, episode }] : [];
   });
+}
+
+export function parsePodcastFeed(xml) {
+  const parser = new XMLParser({ ignoreAttributes: false, processEntities: false });
+  const parsed = parser.parse(xml);
+  const items = parsed?.rss?.channel?.item;
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+
+  return list.flatMap((item) => {
+    const title = String(item.title || item["itunes:title"] || "").trim();
+    const audioUrl = item.enclosure?.["@_url"];
+    return title && audioUrl ? [{ title, audioUrl }] : [];
+  });
+}
+
+export function findPodcastSourceAudioUrl(title, podcastEpisodes) {
+  const wanted = normalizeTitleForMatching(title);
+  return podcastEpisodes.find((episode) => normalizeTitleForMatching(episode.title) === wanted)?.audioUrl || null;
+}
+
+function normalizeTitleForMatching(title) {
+  return String(title || "")
+    .normalize("NFKC")
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 export function hasEpisodeAudio(attributes = {}) {

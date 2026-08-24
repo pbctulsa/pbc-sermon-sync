@@ -10,7 +10,7 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 - Scheduled behavior: publish new episodes to Church Center
 - Starting point: only videos added to the playlist after YouTube video `uZGwiTyVMUU`
 
-The sync copies each video's title, description, on-demand YouTube URL, publication date, thumbnail, and podcast audio. Planning Center requires artwork and audio files to be uploaded first, so the workflow downloads the YouTube thumbnail, extracts an MP3 from the church-owned sermon video, and stores both on the episode. It matches existing episodes by YouTube video ID and skips episodes that already have audio, making repeated runs safe.
+The sync copies each video's title, description, on-demand YouTube URL, publication date, thumbnail, and podcast audio. During the Buzzsprout migration, matching original MP3 files are copied from the existing PBCTULSA feed into Planning Center storage. If no matching source episode exists, the workflow attempts to extract an MP3 from the church-owned YouTube video. It matches existing episodes by YouTube video ID and skips episodes that already have audio, making repeated runs safe.
 
 Videos titled exactly `Sunday Service` are excluded from synchronization.
 

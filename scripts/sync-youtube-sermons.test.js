@@ -7,10 +7,12 @@ import {
   findMissingVideos,
   findOnDemandVideoUrlUpdates,
   findPodcastAudioUpdates,
+  findPodcastSourceAudioUrl,
   findThumbnailUpdates,
   hasEpisodeAudio,
   hasEpisodeArt,
   normalizeYouTubeItem,
+  parsePodcastFeed,
 } from "./sync-youtube-sermons.js";
 
 test("extractYouTubeVideoId handles common YouTube URLs", () => {
@@ -46,6 +48,18 @@ test("findPodcastAudioUpdates finds matching episodes without audio", () => {
   assert.equal(hasEpisodeAudio(linked.attributes), true);
   assert.equal(hasEpisodeAudio(missing.attributes), false);
   assert.equal(hasEpisodeAudio(placeholder.attributes), false);
+});
+
+test("parsePodcastFeed extracts enclosure URLs and matches normalized titles", () => {
+  const episodes = parsePodcastFeed(`
+    <rss><channel><item>
+      <title>God’s Grace | Aug 2</title>
+      <enclosure url="https://example.com/sermon.mp3" type="audio/mpeg" />
+    </item></channel></rss>
+  `);
+
+  assert.deepEqual(episodes, [{ title: "God’s Grace | Aug 2", audioUrl: "https://example.com/sermon.mp3" }]);
+  assert.equal(findPodcastSourceAudioUrl(" God's Grace  | Aug 2 ", episodes), "https://example.com/sermon.mp3");
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {

@@ -75,6 +75,7 @@ jobs:
       PC_SECRET: ${{ secrets.PC_SECRET }}
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       YOUTUBE_PLAYLIST_ID: PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z
+      PODCAST_SOURCE_FEED_URL: https://rss.buzzsprout.com/1986438.rss
       PC_SERMON_CHANNEL_ID: "23566"
       SYNC_AFTER_VIDEO_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_after_video_id || 'uZGwiTyVMUU' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
