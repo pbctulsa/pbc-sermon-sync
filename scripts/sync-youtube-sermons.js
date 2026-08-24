@@ -85,6 +85,9 @@ async function main() {
     return [{ ...update, sourceAudioUrl }];
   });
   const unmatchedPodcastAudioCount = missingPodcastAudioUpdates.length - allPodcastAudioUpdates.length;
+  const unmatchedPodcastAudioUpdates = missingPodcastAudioUpdates.filter(
+    (update) => !findPodcastSourceAudioUrl(update.video.title, podcastSourceEpisodes),
+  );
   const podcastAudioUpdates = allPodcastAudioUpdates.slice(0, env.maxPodcastAudioPerRun);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
@@ -108,6 +111,11 @@ async function main() {
       console.log(
         `Skipped ${unmatchedPodcastAudioCount} episode(s) that do not yet have matching source audio in the migration feed.`,
       );
+      if (env.dryRun) {
+        for (const { video, episode } of unmatchedPodcastAudioUpdates) {
+          console.log(`[dry run] No migration audio match for episode ${episode.id}: ${video.title}`);
+        }
+      }
     }
     console.log(
       channel.attributes?.podcast_feed_url
