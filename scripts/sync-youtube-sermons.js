@@ -187,7 +187,12 @@ async function fetchPodcastSourceEpisodes(feedUrl) {
 }
 
 async function uploadRemotePodcastAudio(video, audioUrl) {
-  const audioResponse = await fetch(audioUrl);
+  const audioResponse = await fetch(audioUrl, {
+    headers: {
+      "User-Agent": "AppleCoreMedia/1.0.0 (iPhone; CPU iPhone OS like Mac OS X)",
+      Referer: env.podcastSourceFeedUrl || "https://rss.buzzsprout.com/",
+    },
+  });
   if (!audioResponse.ok) {
     throw new Error(`Podcast audio download failed for ${video.id} (${audioResponse.status}).`);
   }
