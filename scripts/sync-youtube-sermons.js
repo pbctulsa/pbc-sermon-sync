@@ -510,7 +510,9 @@ export function hasEpisodeAudio(attributes = {}) {
   if (!audio) return false;
   if (typeof audio === "string") return audio.length > 0;
   if (typeof audio !== "object") return false;
-  return Object.values(audio).some(Boolean);
+  return [audio.url, audio.filename, audio.name, audio.signed_identifier, audio.id].some(
+    (value) => typeof value === "string" && value.length > 0,
+  ) || (typeof audio.byte_size === "number" && audio.byte_size > 0);
 }
 
 export function hasEpisodeArt(art) {

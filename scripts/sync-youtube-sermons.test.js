@@ -31,13 +31,21 @@ test("findOnDemandVideoUrlUpdates finds imported episodes missing their library 
 test("findPodcastAudioUpdates finds matching episodes without audio", () => {
   const video = { id: "video123", url: "https://www.youtube.com/watch?v=video123" };
   const missing = { id: "1", attributes: { library_video_url: video.url, sermon_audio: {} } };
+  const placeholder = {
+    id: "4",
+    attributes: { library_video_url: video.url, sermon_audio: { thumbnail: {}, variants: {} } },
+  };
   const uploaded = { id: "2", attributes: { library_video_url: video.url, sermon_audio: { filename: "sermon.mp3" } } };
   const linked = { id: "3", attributes: { library_video_url: video.url, library_audio_url: "https://example.com/a.mp3" } };
 
-  assert.deepEqual(findPodcastAudioUpdates([video], [missing, uploaded, linked]), [{ video, episode: missing }]);
+  assert.deepEqual(findPodcastAudioUpdates([video], [missing, uploaded, linked, placeholder]), [
+    { video, episode: missing },
+    { video, episode: placeholder },
+  ]);
   assert.equal(hasEpisodeAudio(uploaded.attributes), true);
   assert.equal(hasEpisodeAudio(linked.attributes), true);
   assert.equal(hasEpisodeAudio(missing.attributes), false);
+  assert.equal(hasEpisodeAudio(placeholder.attributes), false);
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {
