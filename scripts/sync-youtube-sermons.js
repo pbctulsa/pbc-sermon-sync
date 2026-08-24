@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 const PLANNING_CENTER_API_URL = "https://api.planningcenteronline.com/publishing/v2";
+const PLANNING_CENTER_UPLOAD_URL = "https://upload.planningcenteronline.com/v2/files";
 
 const env = {
   planningCenterClientId: process.env.PC_CLIENTID,
@@ -45,6 +46,7 @@ async function main() {
     .filter((video) => !env.excludedTitles.has(video.title.toLowerCase()));
   const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
+  const thumbnailUpdates = findThumbnailUpdates(videos, existingEpisodes);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
@@ -55,18 +57,31 @@ async function main() {
     console.log(`Only syncing videos added to the playlist on or after ${new Date(env.syncNotBefore).toISOString()}.`);
   }
 
-  if (missingVideos.length === 0) {
+  if (missingVideos.length === 0 && thumbnailUpdates.length === 0) {
     console.log("Planning Center is already up to date.");
     return;
   }
 
-  console.log(`Found ${missingVideos.length} new sermon video(s).`);
+  if (missingVideos.length > 0) console.log(`Found ${missingVideos.length} new sermon video(s).`);
+  if (thumbnailUpdates.length > 0) console.log(`Found ${thumbnailUpdates.length} episode thumbnail(s) to add.`);
 
-  if (!env.dryRun && missingVideos.length > env.maxEpisodesPerRun) {
+  const totalChanges = missingVideos.length + thumbnailUpdates.length;
+  if (!env.dryRun && totalChanges > env.maxEpisodesPerRun) {
     throw new Error(
-      `Refusing to create ${missingVideos.length} episodes in one run. ` +
+      `Refusing to make ${totalChanges} episode changes in one run. ` +
         `Review with DRY_RUN=true, adjust the sync boundary, or raise MAX_EPISODES_PER_RUN (currently ${env.maxEpisodesPerRun}).`,
     );
+  }
+
+  for (const { video, episode } of thumbnailUpdates) {
+    if (env.dryRun) {
+      console.log(`[dry run] Would add YouTube thumbnail to episode ${episode.id}: ${video.title}`);
+      continue;
+    }
+
+    const uploadId = await uploadYouTubeThumbnail(video);
+    await updatePlanningCenterEpisodeArt(episode.id, uploadId);
+    console.log(`Added YouTube thumbnail to episode ${episode.id}: ${video.title}`);
   }
 
   for (const video of missingVideos) {
@@ -75,7 +90,8 @@ async function main() {
       continue;
     }
 
-    const episode = await createPlanningCenterEpisode(video);
+    const uploadId = video.thumbnailUrl ? await uploadYouTubeThumbnail(video) : null;
+    const episode = await createPlanningCenterEpisode(video, uploadId);
     const status = env.publishEpisodes ? "published" : "draft";
     console.log(`Created ${status} episode ${episode.id}: ${video.title}`);
   }
@@ -148,14 +164,49 @@ async function fetchPlanningCenterEpisodes() {
   return episodes;
 }
 
-async function createPlanningCenterEpisode(video) {
+async function createPlanningCenterEpisode(video, uploadId) {
   const response = await planningCenterRequest("/episodes", {
     method: "POST",
     headers: { "Content-Type": "application/vnd.api+json" },
-    body: JSON.stringify(buildEpisodePayload(video, env.planningCenterChannelId, env.publishEpisodes)),
+    body: JSON.stringify(buildEpisodePayload(video, env.planningCenterChannelId, env.publishEpisodes, uploadId)),
   });
   const body = await parseResponse(response, "Planning Center episode creation");
   return body.data;
+}
+
+async function uploadYouTubeThumbnail(video) {
+  const thumbnailResponse = await fetch(video.thumbnailUrl);
+  if (!thumbnailResponse.ok) {
+    throw new Error(`YouTube thumbnail download failed for ${video.id} (${thumbnailResponse.status}).`);
+  }
+
+  const image = await thumbnailResponse.blob();
+  const form = new FormData();
+  form.append("file", image, `${video.id}.${image.type === "image/png" ? "png" : "jpg"}`);
+
+  const response = await planningCenterRequest(PLANNING_CENTER_UPLOAD_URL, {
+    method: "POST",
+    body: form,
+  });
+  const body = await parseResponse(response, "Planning Center thumbnail upload");
+  const uploadId = body.data?.[0]?.id;
+  if (!uploadId) throw new Error(`Planning Center did not return an upload ID for ${video.id}.`);
+  return uploadId;
+}
+
+async function updatePlanningCenterEpisodeArt(episodeId, uploadId) {
+  const response = await planningCenterRequest(`/episodes/${episodeId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({
+      data: {
+        type: "Episode",
+        id: String(episodeId),
+        attributes: { art: uploadId },
+      },
+    }),
+  });
+  await parseResponse(response, "Planning Center episode thumbnail update");
 }
 
 function planningCenterRequest(pathOrUrl, options = {}) {
@@ -198,12 +249,18 @@ export function normalizeYouTubeItem(item) {
 
   if (!videoId || !title || unavailable) return null;
 
+  const thumbnails = item.snippet?.thumbnails || {};
+  const thumbnailUrl = ["maxres", "standard", "high", "medium", "default"]
+    .map((size) => thumbnails[size]?.url)
+    .find(Boolean) || null;
+
   return {
     id: videoId,
     title,
     description: item.snippet?.description?.trim() || "",
     addedToPlaylistAt: item.snippet?.publishedAt || null,
     publishedAt: item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt || null,
+    thumbnailUrl,
     url: `https://www.youtube.com/watch?v=${videoId}`,
   };
 }
@@ -241,6 +298,28 @@ export function findMissingVideos(videos, episodes) {
     .sort((left, right) => new Date(left.addedToPlaylistAt || 0) - new Date(right.addedToPlaylistAt || 0));
 }
 
+export function findThumbnailUpdates(videos, episodes) {
+  const videoById = new Map(videos.map((video) => [video.id, video]));
+
+  return episodes.flatMap((episode) => {
+    const attributes = episode.attributes || {};
+    const videoId = [attributes.video_url, attributes.library_video_url]
+      .map(extractYouTubeVideoId)
+      .find(Boolean);
+    const video = videoById.get(videoId);
+
+    if (!video?.thumbnailUrl || hasEpisodeArt(attributes.art)) return [];
+    return [{ video, episode }];
+  });
+}
+
+export function hasEpisodeArt(art) {
+  if (!art) return false;
+  if (typeof art === "string") return art.length > 0;
+  if (typeof art !== "object") return false;
+  return Object.values(art).some(Boolean);
+}
+
 export function extractYouTubeVideoId(value) {
   if (!value || typeof value !== "string") return null;
 
@@ -257,7 +336,7 @@ export function extractYouTubeVideoId(value) {
   return null;
 }
 
-export function buildEpisodePayload(video, channelId, publish) {
+export function buildEpisodePayload(video, channelId, publish, uploadId = null) {
   return {
     data: {
       type: "Episode",
@@ -267,6 +346,7 @@ export function buildEpisodePayload(video, channelId, publish) {
         stream_type: "prerecorded",
         video_url: video.url,
         published_to_library_at: publish ? video.publishedAt || new Date().toISOString() : null,
+        ...(uploadId ? { art: uploadId } : {}),
       },
       relationships: {
         channel: {

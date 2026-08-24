@@ -5,6 +5,8 @@ import {
   extractYouTubeVideoId,
   filterVideosForSync,
   findMissingVideos,
+  findThumbnailUpdates,
+  hasEpisodeArt,
   normalizeYouTubeItem,
 } from "./sync-youtube-sermons.js";
 
@@ -19,7 +21,12 @@ test("normalizeYouTubeItem skips unavailable videos", () => {
   assert.equal(normalizeYouTubeItem({ snippet: { title: "Private video" }, contentDetails: { videoId: "private" } }), null);
   assert.deepEqual(
     normalizeYouTubeItem({
-      snippet: { title: " Sunday Sermon ", description: " Message ", publishedAt: "2026-08-23T12:00:00Z" },
+      snippet: {
+        title: " Sunday Sermon ",
+        description: " Message ",
+        publishedAt: "2026-08-23T12:00:00Z",
+        thumbnails: { high: { url: "https://i.ytimg.com/vi/video123/hqdefault.jpg" } },
+      },
       contentDetails: { videoId: "video123" },
       status: { privacyStatus: "public" },
     }),
@@ -29,9 +36,22 @@ test("normalizeYouTubeItem skips unavailable videos", () => {
       description: "Message",
       addedToPlaylistAt: "2026-08-23T12:00:00Z",
       publishedAt: "2026-08-23T12:00:00Z",
+      thumbnailUrl: "https://i.ytimg.com/vi/video123/hqdefault.jpg",
       url: "https://www.youtube.com/watch?v=video123",
     },
   );
+});
+
+test("findThumbnailUpdates matches episodes that have no artwork", () => {
+  const video = { id: "video123", thumbnailUrl: "https://i.ytimg.com/vi/video123/hqdefault.jpg" };
+  const episodes = [
+    { id: "1", attributes: { video_url: "https://youtu.be/video123", art: {} } },
+    { id: "2", attributes: { video_url: "https://youtu.be/other", art: {} } },
+  ];
+
+  assert.deepEqual(findThumbnailUpdates([video], episodes), [{ video, episode: episodes[0] }]);
+  assert.equal(hasEpisodeArt({ thumbnail: "https://example.com/art.jpg" }), true);
+  assert.equal(hasEpisodeArt({}), false);
 });
 
 test("filterVideosForSync selects videos added after the boundary video", () => {
@@ -74,4 +94,7 @@ test("buildEpisodePayload creates a draft unless publishing is enabled", () => {
 
   const publishedPayload = buildEpisodePayload(video, "23566", true);
   assert.equal(publishedPayload.data.attributes.published_to_library_at, "2026-08-23T12:00:00Z");
+
+  const thumbnailPayload = buildEpisodePayload(video, "23566", true, "upload-123");
+  assert.equal(thumbnailPayload.data.attributes.art, "upload-123");
 });
