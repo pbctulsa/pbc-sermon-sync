@@ -42,6 +42,8 @@ Set `publish` to `true` only when new episodes should immediately appear in Chur
 
 The workflow refuses to create more than 10 episodes in one run. Change the boundary video or `MAX_EPISODES_PER_RUN` deliberately for a larger historical import.
 
+Use the manual `force_thumbnail_backfill` option only when existing episode artwork needs to be replaced with YouTube thumbnails. Scheduled runs leave it disabled.
+
 ## Local Preview
 
 ```bash

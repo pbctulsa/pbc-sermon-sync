@@ -29,6 +29,14 @@ on:
         required: true
         default: "10"
         type: string
+      force_thumbnail_backfill:
+        description: "Replace existing episode artwork with YouTube thumbnails"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   schedule:
     - cron: "0 14 * * *"
 
@@ -47,6 +55,7 @@ jobs:
       PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'true' }}
       MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
       EXCLUDED_TITLES: Sunday Service
+      FORCE_THUMBNAIL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_thumbnail_backfill || 'false' }}
 
     steps:
       - name: Check out repository

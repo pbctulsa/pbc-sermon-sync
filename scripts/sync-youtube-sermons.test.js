@@ -50,6 +50,9 @@ test("findThumbnailUpdates matches episodes that have no artwork", () => {
   ];
 
   assert.deepEqual(findThumbnailUpdates([video], episodes), [{ video, episode: episodes[0] }]);
+  const episodeWithArt = { id: "3", attributes: { video_url: "https://youtu.be/video123", art: { url: "existing" } } };
+  assert.deepEqual(findThumbnailUpdates([video], [episodeWithArt]), []);
+  assert.deepEqual(findThumbnailUpdates([video], [episodeWithArt], true), [{ video, episode: episodeWithArt }]);
   assert.equal(hasEpisodeArt({ thumbnail: "https://example.com/art.jpg" }), true);
   assert.equal(hasEpisodeArt({}), false);
 });

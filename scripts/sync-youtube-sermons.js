@@ -15,6 +15,7 @@ const env = {
   syncNotBefore: process.env.SYNC_NOT_BEFORE || null,
   dryRun: isTruthy(process.env.DRY_RUN),
   publishEpisodes: isTruthy(process.env.PUBLISH_EPISODES),
+  forceThumbnailBackfill: isTruthy(process.env.FORCE_THUMBNAIL_BACKFILL),
   maxEpisodesPerRun: Number.parseInt(process.env.MAX_EPISODES_PER_RUN || "10", 10),
   excludedTitles: new Set(
     (process.env.EXCLUDED_TITLES || "Sunday Service")
@@ -46,7 +47,7 @@ async function main() {
     .filter((video) => !env.excludedTitles.has(video.title.toLowerCase()));
   const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
-  const thumbnailUpdates = findThumbnailUpdates(videos, existingEpisodes);
+  const thumbnailUpdates = findThumbnailUpdates(videos, existingEpisodes, env.forceThumbnailBackfill);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
@@ -298,7 +299,7 @@ export function findMissingVideos(videos, episodes) {
     .sort((left, right) => new Date(left.addedToPlaylistAt || 0) - new Date(right.addedToPlaylistAt || 0));
 }
 
-export function findThumbnailUpdates(videos, episodes) {
+export function findThumbnailUpdates(videos, episodes, force = false) {
   const videoById = new Map(videos.map((video) => [video.id, video]));
 
   return episodes.flatMap((episode) => {
@@ -308,7 +309,7 @@ export function findThumbnailUpdates(videos, episodes) {
       .find(Boolean);
     const video = videoById.get(videoId);
 
-    if (!video?.thumbnailUrl || hasEpisodeArt(attributes.art)) return [];
+    if (!video?.thumbnailUrl || (!force && hasEpisodeArt(attributes.art))) return [];
     return [{ video, episode }];
   });
 }
