@@ -28,6 +28,7 @@ const env = {
     ? Number.parseInt(process.env.THUMBNAIL_EPISODE_ID_MIN, 10)
     : null,
   maxEpisodesPerRun: Number.parseInt(process.env.MAX_EPISODES_PER_RUN || "10", 10),
+  maxPodcastAudioPerRun: Number.parseInt(process.env.MAX_PODCAST_AUDIO_PER_RUN || "5", 10),
   excludedTitles: new Set(
     (process.env.EXCLUDED_TITLES || "Sunday Service")
       .split(",")
@@ -65,9 +66,10 @@ async function main() {
     env.thumbnailEpisodeIdMin,
   );
   const videoUrlUpdates = findOnDemandVideoUrlUpdates(videos, existingEpisodes);
-  const podcastAudioUpdates = env.syncPodcastAudio
+  const allPodcastAudioUpdates = env.syncPodcastAudio
     ? findPodcastAudioUpdates(env.audioBackfillAllPlaylist ? normalizedVideos : videos, existingEpisodes)
     : [];
+  const podcastAudioUpdates = allPodcastAudioUpdates.slice(0, env.maxPodcastAudioPerRun);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
@@ -108,8 +110,11 @@ async function main() {
   if (missingVideos.length > 0) console.log(`Found ${missingVideos.length} new sermon video(s).`);
   if (thumbnailUpdates.length > 0) console.log(`Found ${thumbnailUpdates.length} episode thumbnail(s) to add.`);
   if (videoUrlUpdates.length > 0) console.log(`Found ${videoUrlUpdates.length} on-demand video URL(s) to add.`);
-  if (podcastAudioUpdates.length > 0) {
-    console.log(`Found ${podcastAudioUpdates.length} episode podcast audio file(s) to add.`);
+  if (allPodcastAudioUpdates.length > 0) {
+    console.log(
+      `Found ${allPodcastAudioUpdates.length} episode podcast audio file(s) to add; ` +
+        `processing up to ${env.maxPodcastAudioPerRun} this run.`,
+    );
   }
 
   const totalChanges = missingVideos.length + thumbnailUpdates.length + videoUrlUpdates.length + podcastAudioUpdates.length;
@@ -188,6 +193,10 @@ function validateConfig() {
 
   if (!Number.isInteger(env.maxEpisodesPerRun) || env.maxEpisodesPerRun < 1) {
     throw new Error("MAX_EPISODES_PER_RUN must be a positive integer.");
+  }
+
+  if (!Number.isInteger(env.maxPodcastAudioPerRun) || env.maxPodcastAudioPerRun < 1) {
+    throw new Error("MAX_PODCAST_AUDIO_PER_RUN must be a positive integer.");
   }
 
   if (env.thumbnailEpisodeIdMin !== null && !Number.isInteger(env.thumbnailEpisodeIdMin)) {
@@ -279,6 +288,10 @@ async function uploadYouTubeAudio(video) {
         "mp3",
         "--audio-quality",
         "5",
+        "--js-runtimes",
+        "node",
+        "--remote-components",
+        "ejs:github",
         "--output",
         outputTemplate,
         video.url,

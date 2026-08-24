@@ -35,6 +35,11 @@ on:
         options:
           - "false"
           - "true"
+      max_podcast_audio_per_run:
+        description: "Maximum podcast audio files to process in this run"
+        required: true
+        default: "5"
+        type: string
       sync_after_video_id:
         description: "Only sync videos added after this YouTube video ID"
         required: true
@@ -77,6 +82,7 @@ jobs:
       SYNC_PODCAST_AUDIO: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_podcast_audio || 'true' }}
       AUDIO_BACKFILL_ALL_PLAYLIST: ${{ github.event_name == 'workflow_dispatch' && inputs.audio_backfill_all_playlist || 'false' }}
       MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
+      MAX_PODCAST_AUDIO_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_podcast_audio_per_run || '5' }}
       EXCLUDED_TITLES: Sunday Service
       FORCE_THUMBNAIL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_thumbnail_backfill || 'false' }}
       THUMBNAIL_EPISODE_ID_MIN: ${{ github.event_name == 'workflow_dispatch' && inputs.thumbnail_episode_id_min || '' }}

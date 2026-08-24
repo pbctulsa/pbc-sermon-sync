@@ -45,7 +45,7 @@ The workflow refuses to create more than 10 episodes in one run. Change the boun
 
 Use the manual `force_thumbnail_backfill` option only when existing episode artwork needs to be replaced with YouTube thumbnails. Scheduled runs leave it disabled.
 
-Use `audio_backfill_all_playlist=true` for the podcast migration only. It searches the entire YouTube playlist for matching Planning Center episodes, including sermons before the normal video sync boundary. The normal safety limit still applies, so backfill in reviewed batches.
+Use `audio_backfill_all_playlist=true` for the podcast migration only. It searches the entire YouTube playlist for matching Planning Center episodes, including sermons before the normal video sync boundary. `max_podcast_audio_per_run` limits each reviewed batch; scheduled runs process up to five missing files and new weekly sermons normally require only one.
 
 ## Local Preview
 
