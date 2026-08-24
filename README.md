@@ -7,8 +7,8 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 - YouTube playlist: [PBC Sermons](https://youtube.com/playlist?list=PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z)
 - Planning Center channel: [Sunday Sermons](https://pbctulsa.churchcenter.com/channels/23566)
 - Schedule: daily at 14:00 UTC (9:00 AM Central during daylight saving time and 8:00 AM Central during standard time)
-- Scheduled behavior: create draft episodes for staff review
-- Start date: only videos added to the playlist on or after August 23, 2026
+- Scheduled behavior: publish new episodes to Church Center
+- Starting point: only videos added to the playlist after YouTube video `uZGwiTyVMUU`
 
 The sync copies each video's title, description, and YouTube URL. It matches existing episodes by YouTube video ID, making repeated runs safe.
 
@@ -30,14 +30,14 @@ Scheduled runs remain disabled until testing is complete. To enable them, create
 
 1. Open **Actions → YouTube Sermon Sync → Run workflow**.
 2. Leave `dry_run` set to `true`.
-3. Leave `publish` set to `false`.
+3. Set `publish` to `true` (dry-run mode still prevents changes).
 4. Review the workflow log showing what would be created.
-5. Run it again with `dry_run` set to `false` to create drafts.
-6. After confirming the draft looks correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
+5. Run it again with `dry_run` set to `false` and `publish` set to `true` to publish the missing episodes.
+6. After confirming they look correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
 
 Set `publish` to `true` only when new episodes should immediately appear in Church Center.
 
-The workflow refuses to create more than 10 episodes in one run. Change the start date or `MAX_EPISODES_PER_RUN` deliberately for a larger historical import.
+The workflow refuses to create more than 10 episodes in one run. Change the boundary video or `MAX_EPISODES_PER_RUN` deliberately for a larger historical import.
 
 ## Local Preview
 
@@ -47,7 +47,7 @@ PC_SECRET=... \
 YOUTUBE_API_KEY=... \
 YOUTUBE_PLAYLIST_ID=PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z \
 PC_SERMON_CHANNEL_ID=23566 \
-SYNC_NOT_BEFORE=2026-08-23 \
+SYNC_AFTER_VIDEO_ID=uZGwiTyVMUU \
 DRY_RUN=true \
 npm run sync
 ```

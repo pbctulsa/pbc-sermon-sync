@@ -19,10 +19,10 @@ on:
         options:
           - "false"
           - "true"
-      sync_not_before:
-        description: "Only sync videos added to YouTube on/after this date"
+      sync_after_video_id:
+        description: "Only sync videos added after this YouTube video ID"
         required: true
-        default: "2026-08-23"
+        default: "uZGwiTyVMUU"
         type: string
   schedule:
     - cron: "0 14 * * *"
@@ -37,9 +37,9 @@ jobs:
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       YOUTUBE_PLAYLIST_ID: PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z
       PC_SERMON_CHANNEL_ID: "23566"
-      SYNC_NOT_BEFORE: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_not_before || '2026-08-23' }}
+      SYNC_AFTER_VIDEO_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_after_video_id || 'uZGwiTyVMUU' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
-      PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'false' }}
+      PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'true' }}
       MAX_EPISODES_PER_RUN: "10"
 
     steps:

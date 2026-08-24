@@ -10,6 +10,7 @@ const env = {
   youtubeApiKey: process.env.YOUTUBE_API_KEY,
   youtubePlaylistId: process.env.YOUTUBE_PLAYLIST_ID,
   planningCenterChannelId: process.env.PC_SERMON_CHANNEL_ID,
+  syncAfterVideoId: process.env.SYNC_AFTER_VIDEO_ID || null,
   syncNotBefore: process.env.SYNC_NOT_BEFORE || null,
   dryRun: isTruthy(process.env.DRY_RUN),
   publishEpisodes: isTruthy(process.env.PUBLISH_EPISODES),
@@ -32,16 +33,18 @@ async function main() {
     fetchPlanningCenterEpisodes(),
   ]);
 
-  const videos = playlistItems
+  const normalizedVideos = playlistItems
     .map(normalizeYouTubeItem)
-    .filter(Boolean)
-    .filter((video) => isOnOrAfterCutoff(video.addedToPlaylistAt, env.syncNotBefore));
+    .filter(Boolean);
+  const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
 
-  if (env.syncNotBefore) {
+  if (env.syncAfterVideoId) {
+    console.log(`Only syncing videos added to the playlist after YouTube video ${env.syncAfterVideoId}.`);
+  } else if (env.syncNotBefore) {
     console.log(`Only syncing videos added to the playlist on or after ${new Date(env.syncNotBefore).toISOString()}.`);
   }
 
@@ -55,7 +58,7 @@ async function main() {
   if (!env.dryRun && missingVideos.length > env.maxEpisodesPerRun) {
     throw new Error(
       `Refusing to create ${missingVideos.length} episodes in one run. ` +
-        `Review with DRY_RUN=true, adjust SYNC_NOT_BEFORE, or raise MAX_EPISODES_PER_RUN (currently ${env.maxEpisodesPerRun}).`,
+        `Review with DRY_RUN=true, adjust the sync boundary, or raise MAX_EPISODES_PER_RUN (currently ${env.maxEpisodesPerRun}).`,
     );
   }
 
@@ -193,8 +196,27 @@ export function normalizeYouTubeItem(item) {
     title,
     description: item.snippet?.description?.trim() || "",
     addedToPlaylistAt: item.snippet?.publishedAt || null,
+    publishedAt: item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt || null,
     url: `https://www.youtube.com/watch?v=${videoId}`,
   };
+}
+
+export function filterVideosForSync(videos, syncAfterVideoId, syncNotBefore) {
+  if (syncAfterVideoId) {
+    const boundary = videos.find((video) => video.id === syncAfterVideoId);
+    if (!boundary) {
+      throw new Error(`SYNC_AFTER_VIDEO_ID ${syncAfterVideoId} was not found in the YouTube playlist.`);
+    }
+    if (!boundary.addedToPlaylistAt) {
+      throw new Error(`YouTube did not provide a playlist-added date for boundary video ${syncAfterVideoId}.`);
+    }
+
+    return videos.filter(
+      (video) => video.addedToPlaylistAt && Date.parse(video.addedToPlaylistAt) > Date.parse(boundary.addedToPlaylistAt),
+    );
+  }
+
+  return videos.filter((video) => isOnOrAfterCutoff(video.addedToPlaylistAt, syncNotBefore));
 }
 
 export function findMissingVideos(videos, episodes) {
@@ -237,7 +259,7 @@ export function buildEpisodePayload(video, channelId, publish) {
         description: video.description,
         stream_type: "prerecorded",
         video_url: video.url,
-        published_to_library_at: publish ? new Date().toISOString() : null,
+        published_to_library_at: publish ? video.publishedAt || new Date().toISOString() : null,
       },
       relationships: {
         channel: {
