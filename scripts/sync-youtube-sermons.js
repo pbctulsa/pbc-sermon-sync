@@ -72,13 +72,19 @@ async function main() {
     env.thumbnailEpisodeIdMin,
   );
   const videoUrlUpdates = findOnDemandVideoUrlUpdates(videos, existingEpisodes);
-  const allPodcastAudioUpdates = env.syncPodcastAudio
+  const missingPodcastAudioUpdates = env.syncPodcastAudio
     ? findPodcastAudioUpdates(
         env.audioBackfillAllPlaylist ? normalizedVideos : videos,
         existingEpisodes,
         planningCenterPodcastEpisodes,
       )
     : [];
+  const allPodcastAudioUpdates = missingPodcastAudioUpdates.flatMap((update) => {
+    const sourceAudioUrl = findPodcastSourceAudioUrl(update.video.title, podcastSourceEpisodes);
+    if (env.podcastSourceFeedUrl && !sourceAudioUrl) return [];
+    return [{ ...update, sourceAudioUrl }];
+  });
+  const unmatchedPodcastAudioCount = missingPodcastAudioUpdates.length - allPodcastAudioUpdates.length;
   const podcastAudioUpdates = allPodcastAudioUpdates.slice(0, env.maxPodcastAudioPerRun);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
@@ -98,6 +104,11 @@ async function main() {
       console.log(`Loaded ${podcastSourceEpisodes.length} existing podcast episode(s) as migration audio sources.`);
     }
     console.log(`Planning Center podcast feed currently contains ${planningCenterPodcastEpisodes.length} episode(s).`);
+    if (unmatchedPodcastAudioCount > 0) {
+      console.log(
+        `Skipped ${unmatchedPodcastAudioCount} episode(s) that do not yet have matching source audio in the migration feed.`,
+      );
+    }
     console.log(
       channel.attributes?.podcast_feed_url
         ? `Planning Center podcast feed: ${channel.attributes.podcast_feed_url}`
@@ -160,13 +171,12 @@ async function main() {
     console.log(`Added on-demand video URL to episode ${episode.id}: ${video.title}`);
   }
 
-  for (const { video, episode } of podcastAudioUpdates) {
+  for (const { video, episode, sourceAudioUrl } of podcastAudioUpdates) {
     if (env.dryRun) {
       console.log(`[dry run] Would add podcast audio to episode ${episode.id}: ${video.title}`);
       continue;
     }
 
-    const sourceAudioUrl = findPodcastSourceAudioUrl(video.title, podcastSourceEpisodes);
     const uploadId = sourceAudioUrl
       ? await uploadRemotePodcastAudio(video, sourceAudioUrl)
       : await uploadYouTubeAudio(video);
@@ -181,7 +191,14 @@ async function main() {
     }
 
     const uploadId = video.thumbnailUrl ? await uploadYouTubeThumbnail(video) : null;
-    const audioUploadId = env.syncPodcastAudio ? await uploadYouTubeAudio(video) : null;
+    const sourceAudioUrl = findPodcastSourceAudioUrl(video.title, podcastSourceEpisodes);
+    const audioUploadId = env.syncPodcastAudio
+      ? sourceAudioUrl
+        ? await uploadRemotePodcastAudio(video, sourceAudioUrl)
+        : env.podcastSourceFeedUrl
+          ? null
+          : await uploadYouTubeAudio(video)
+      : null;
     const episode = await createPlanningCenterEpisode(video, uploadId, audioUploadId);
     const status = env.publishEpisodes ? "published" : "draft";
     console.log(`Created ${status} episode ${episode.id}: ${video.title}`);
