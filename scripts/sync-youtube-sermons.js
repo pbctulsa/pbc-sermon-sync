@@ -56,6 +56,7 @@ async function main() {
     env.forceThumbnailBackfill,
     env.thumbnailEpisodeIdMin,
   );
+  const videoUrlUpdates = findOnDemandVideoUrlUpdates(videos, existingEpisodes);
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
@@ -66,15 +67,16 @@ async function main() {
     console.log(`Only syncing videos added to the playlist on or after ${new Date(env.syncNotBefore).toISOString()}.`);
   }
 
-  if (missingVideos.length === 0 && thumbnailUpdates.length === 0) {
+  if (missingVideos.length === 0 && thumbnailUpdates.length === 0 && videoUrlUpdates.length === 0) {
     console.log("Planning Center is already up to date.");
     return;
   }
 
   if (missingVideos.length > 0) console.log(`Found ${missingVideos.length} new sermon video(s).`);
   if (thumbnailUpdates.length > 0) console.log(`Found ${thumbnailUpdates.length} episode thumbnail(s) to add.`);
+  if (videoUrlUpdates.length > 0) console.log(`Found ${videoUrlUpdates.length} on-demand video URL(s) to add.`);
 
-  const totalChanges = missingVideos.length + thumbnailUpdates.length;
+  const totalChanges = missingVideos.length + thumbnailUpdates.length + videoUrlUpdates.length;
   if (!env.dryRun && totalChanges > env.maxEpisodesPerRun) {
     throw new Error(
       `Refusing to make ${totalChanges} episode changes in one run. ` +
@@ -91,6 +93,16 @@ async function main() {
     const uploadId = await uploadYouTubeThumbnail(video);
     await updatePlanningCenterEpisodeArt(episode.id, uploadId);
     console.log(`Added YouTube thumbnail to episode ${episode.id}: ${video.title}`);
+  }
+
+  for (const { video, episode } of videoUrlUpdates) {
+    if (env.dryRun) {
+      console.log(`[dry run] Would add on-demand video URL to episode ${episode.id}: ${video.title}`);
+      continue;
+    }
+
+    await updatePlanningCenterEpisodeOnDemandUrl(episode.id, video.url);
+    console.log(`Added on-demand video URL to episode ${episode.id}: ${video.title}`);
   }
 
   for (const video of missingVideos) {
@@ -222,6 +234,21 @@ async function updatePlanningCenterEpisodeArt(episodeId, uploadId) {
   await parseResponse(response, "Planning Center episode thumbnail update");
 }
 
+async function updatePlanningCenterEpisodeOnDemandUrl(episodeId, videoUrl) {
+  const response = await planningCenterRequest(`/episodes/${episodeId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({
+      data: {
+        type: "Episode",
+        id: String(episodeId),
+        attributes: { library_video_url: videoUrl },
+      },
+    }),
+  });
+  await parseResponse(response, "Planning Center on-demand video URL update");
+}
+
 function planningCenterRequest(pathOrUrl, options = {}) {
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${PLANNING_CENTER_API_URL}${pathOrUrl}`;
   const authorization = Buffer.from(`${env.planningCenterClientId}:${env.planningCenterSecret}`).toString("base64");
@@ -327,6 +354,19 @@ export function findThumbnailUpdates(videos, episodes, force = false, episodeIdM
   });
 }
 
+export function findOnDemandVideoUrlUpdates(videos, episodes) {
+  const videoById = new Map(videos.map((video) => [video.id, video]));
+
+  return episodes.flatMap((episode) => {
+    const attributes = episode.attributes || {};
+    if (extractYouTubeVideoId(attributes.library_video_url)) return [];
+
+    const videoId = extractYouTubeVideoId(attributes.video_url);
+    const video = videoById.get(videoId);
+    return video ? [{ video, episode }] : [];
+  });
+}
+
 export function hasEpisodeArt(art) {
   if (!art) return false;
   if (typeof art === "string") return art.length > 0;
@@ -358,7 +398,7 @@ export function buildEpisodePayload(video, channelId, publish, uploadId = null) 
         title: video.title,
         description: video.description,
         stream_type: "prerecorded",
-        video_url: video.url,
+        library_video_url: video.url,
         published_to_library_at: publish ? video.publishedAt || new Date().toISOString() : null,
         ...(uploadId ? { art: uploadId } : {}),
       },

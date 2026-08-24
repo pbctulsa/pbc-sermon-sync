@@ -10,7 +10,7 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 - Scheduled behavior: publish new episodes to Church Center
 - Starting point: only videos added to the playlist after YouTube video `uZGwiTyVMUU`
 
-The sync copies each video's title, description, YouTube URL, publication date, and thumbnail. Planning Center requires artwork to be uploaded first, so the workflow downloads each YouTube thumbnail and stores it as the episode artwork. It matches existing episodes by YouTube video ID, making repeated runs safe.
+The sync copies each video's title, description, on-demand YouTube URL, publication date, and thumbnail. Planning Center requires artwork to be uploaded first, so the workflow downloads each YouTube thumbnail and stores it as the episode artwork. It matches existing episodes by YouTube video ID, making repeated runs safe.
 
 Videos titled exactly `Sunday Service` are excluded from synchronization.
 

@@ -5,6 +5,7 @@ import {
   extractYouTubeVideoId,
   filterVideosForSync,
   findMissingVideos,
+  findOnDemandVideoUrlUpdates,
   findThumbnailUpdates,
   hasEpisodeArt,
   normalizeYouTubeItem,
@@ -15,6 +16,14 @@ test("extractYouTubeVideoId handles common YouTube URLs", () => {
   assert.equal(extractYouTubeVideoId("https://youtu.be/abc_123-x"), "abc_123-x");
   assert.equal(extractYouTubeVideoId("https://www.youtube.com/live/abc_123-x?feature=share"), "abc_123-x");
   assert.equal(extractYouTubeVideoId("https://example.com/video"), null);
+});
+
+test("findOnDemandVideoUrlUpdates finds imported episodes missing their library URL", () => {
+  const video = { id: "video123", url: "https://www.youtube.com/watch?v=video123" };
+  const missing = { id: "1", attributes: { video_url: video.url, library_video_url: null } };
+  const complete = { id: "2", attributes: { video_url: video.url, library_video_url: video.url } };
+
+  assert.deepEqual(findOnDemandVideoUrlUpdates([video], [missing, complete]), [{ video, episode: missing }]);
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {
@@ -94,6 +103,8 @@ test("buildEpisodePayload creates a draft unless publishing is enabled", () => {
   assert.equal(payload.data.type, "Episode");
   assert.equal(payload.data.attributes.published_to_library_at, null);
   assert.equal(payload.data.attributes.stream_type, "prerecorded");
+  assert.equal(payload.data.attributes.library_video_url, "https://youtu.be/video123");
+  assert.equal(payload.data.attributes.video_url, undefined);
   assert.deepEqual(payload.data.relationships.channel.data, { type: "Channel", id: "23566" });
 
   const publishedPayload = buildEpisodePayload(video, "23566", true);
