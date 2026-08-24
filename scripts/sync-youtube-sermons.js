@@ -594,22 +594,40 @@ export function findPodcastAudioUpdates(videos, episodes, publishedPodcastEpisod
 }
 
 export function parsePodcastFeed(xml) {
-  const parser = new XMLParser({ ignoreAttributes: false, processEntities: false });
+  const parser = new XMLParser({ ignoreAttributes: false, processEntities: true });
   const parsed = parser.parse(xml);
   const items = parsed?.rss?.channel?.item;
   const list = Array.isArray(items) ? items : items ? [items] : [];
 
   return list.flatMap((item) => {
-    const title = String(item.title || item["itunes:title"] || "").trim();
+    const title = decodeXmlEntities(String(item.title || item["itunes:title"] || "")).trim();
     const audioUrl = item.enclosure?.["@_url"];
     return title && audioUrl ? [{ title, audioUrl }] : [];
   });
+}
+
+function decodeXmlEntities(value) {
+  const named = { amp: "&", apos: "'", quot: '"', lt: "<", gt: ">" };
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&(amp|apos|quot|lt|gt);/g, (_, name) => named[name]);
 }
 
 export function findPodcastSourceAudioUrl(title, podcastEpisodes) {
   const wanted = normalizeTitleForMatching(title);
   const exact = podcastEpisodes.find((episode) => normalizeTitleForMatching(episode.title) === wanted);
   if (exact) return exact.audioUrl;
+
+  const wantedSegments = wanted.split("|").map((segment) => segment.trim());
+  const segmentMatch = podcastEpisodes.find((episode) => {
+    const candidateSegments = normalizeTitleForMatching(episode.title)
+      .split("|")
+      .map((segment) => segment.trim());
+    const matchingSegments = wantedSegments.filter((segment) => candidateSegments.includes(segment));
+    return wantedSegments[0] === candidateSegments[0] && matchingSegments.length >= 2;
+  });
+  if (segmentMatch) return segmentMatch.audioUrl;
 
   const closest = podcastEpisodes
     .map((episode) => ({ episode, distance: levenshteinDistance(wanted, normalizeTitleForMatching(episode.title)) }))

@@ -57,14 +57,18 @@ test("findPodcastAudioUpdates finds matching episodes without audio", () => {
 test("parsePodcastFeed extracts enclosure URLs and matches normalized titles", () => {
   const episodes = parsePodcastFeed(`
     <rss><channel><item>
-      <title>God’s Grace | Aug 2</title>
+      <title>God&#39;s Grace | Aug 2</title>
       <enclosure url="https://example.com/sermon.mp3" type="audio/mpeg" />
     </item></channel></rss>
   `);
 
-  assert.deepEqual(episodes, [{ title: "God’s Grace | Aug 2", audioUrl: "https://example.com/sermon.mp3" }]);
+  assert.deepEqual(episodes, [{ title: "God's Grace | Aug 2", audioUrl: "https://example.com/sermon.mp3" }]);
   assert.equal(findPodcastSourceAudioUrl(" God's Grace  | Aug 2 ", episodes), "https://example.com/sermon.mp3");
   assert.equal(findPodcastSourceAudioUrl("God's Graca | Aug 2", episodes), "https://example.com/sermon.mp3");
+  assert.equal(
+    findPodcastSourceAudioUrl("God's Grace | Guest Speaker | Aug 2", episodes),
+    "https://example.com/sermon.mp3",
+  );
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {
