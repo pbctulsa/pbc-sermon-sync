@@ -48,6 +48,10 @@ test("findPodcastAudioUpdates finds matching episodes without audio", () => {
   assert.equal(hasEpisodeAudio(linked.attributes), true);
   assert.equal(hasEpisodeAudio(missing.attributes), false);
   assert.equal(hasEpisodeAudio(placeholder.attributes), false);
+
+  const published = [{ title: missing.attributes.title || "Published sermon" }];
+  const titledMissing = { ...missing, attributes: { ...missing.attributes, title: "Published sermon" } };
+  assert.deepEqual(findPodcastAudioUpdates([video], [titledMissing], published), []);
 });
 
 test("parsePodcastFeed extracts enclosure URLs and matches normalized titles", () => {

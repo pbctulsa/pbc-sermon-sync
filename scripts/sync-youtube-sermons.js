@@ -60,6 +60,9 @@ async function main() {
     .map(normalizeYouTubeItem)
     .filter(Boolean)
     .filter((video) => !env.excludedTitles.has(video.title.toLowerCase()));
+  const planningCenterPodcastEpisodes = channel.attributes?.podcast_feed_url
+    ? await fetchPodcastSourceEpisodes(channel.attributes.podcast_feed_url)
+    : [];
   const videos = filterVideosForSync(normalizedVideos, env.syncAfterVideoId, env.syncNotBefore);
   const missingVideos = findMissingVideos(videos, existingEpisodes);
   const thumbnailUpdates = findThumbnailUpdates(
@@ -70,7 +73,11 @@ async function main() {
   );
   const videoUrlUpdates = findOnDemandVideoUrlUpdates(videos, existingEpisodes);
   const allPodcastAudioUpdates = env.syncPodcastAudio
-    ? findPodcastAudioUpdates(env.audioBackfillAllPlaylist ? normalizedVideos : videos, existingEpisodes)
+    ? findPodcastAudioUpdates(
+        env.audioBackfillAllPlaylist ? normalizedVideos : videos,
+        existingEpisodes,
+        planningCenterPodcastEpisodes,
+      )
     : [];
   const podcastAudioUpdates = allPodcastAudioUpdates.slice(0, env.maxPodcastAudioPerRun);
 
@@ -90,6 +97,7 @@ async function main() {
     if (podcastSourceEpisodes.length > 0) {
       console.log(`Loaded ${podcastSourceEpisodes.length} existing podcast episode(s) as migration audio sources.`);
     }
+    console.log(`Planning Center podcast feed currently contains ${planningCenterPodcastEpisodes.length} episode(s).`);
     console.log(
       channel.attributes?.podcast_feed_url
         ? `Planning Center podcast feed: ${channel.attributes.podcast_feed_url}`
@@ -542,12 +550,15 @@ export function findOnDemandVideoUrlUpdates(videos, episodes) {
   });
 }
 
-export function findPodcastAudioUpdates(videos, episodes) {
+export function findPodcastAudioUpdates(videos, episodes, publishedPodcastEpisodes = []) {
   const videoById = new Map(videos.map((video) => [video.id, video]));
+  const publishedTitles = new Set(
+    publishedPodcastEpisodes.map((episode) => normalizeTitleForMatching(episode.title)),
+  );
 
   return episodes.flatMap((episode) => {
     const attributes = episode.attributes || {};
-    if (hasEpisodeAudio(attributes)) return [];
+    if (hasEpisodeAudio(attributes) || publishedTitles.has(normalizeTitleForMatching(attributes.title))) return [];
 
     const videoId = [attributes.library_video_url, attributes.video_url]
       .map(extractYouTubeVideoId)
