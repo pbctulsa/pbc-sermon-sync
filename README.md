@@ -6,7 +6,7 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 
 - YouTube playlist: [PBC Sermons](https://youtube.com/playlist?list=PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z)
 - Planning Center channel: [Sunday Sermons](https://pbctulsa.churchcenter.com/channels/23566)
-- Schedule: hourly, at 17 minutes past the hour
+- Schedule: daily at 14:00 UTC (9:00 AM Central during daylight saving time and 8:00 AM Central during standard time)
 - Scheduled behavior: create draft episodes for staff review
 - Start date: only videos added to the playlist on or after August 23, 2026
 

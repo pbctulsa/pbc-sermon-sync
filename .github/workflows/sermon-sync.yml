@@ -25,7 +25,7 @@ on:
         default: "2026-08-23"
         type: string
   schedule:
-    - cron: "17 * * * *"
+    - cron: "0 14 * * *"
 
 jobs:
   sync:
