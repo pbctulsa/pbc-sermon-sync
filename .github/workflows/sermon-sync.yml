@@ -1,0 +1,55 @@
+name: YouTube Sermon Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview missing sermons without creating episodes"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      publish:
+        description: "Publish new episodes immediately to Church Center"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      sync_not_before:
+        description: "Only sync videos added to YouTube on/after this date"
+        required: true
+        default: "2026-08-23"
+        type: string
+  schedule:
+    - cron: "17 * * * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      PC_CLIENTID: ${{ secrets.PC_CLIENTID }}
+      PC_SECRET: ${{ secrets.PC_SECRET }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      YOUTUBE_PLAYLIST_ID: PL55zozglajy_Nw-rQ-ydZeRjn1kyKnj8z
+      PC_SERMON_CHANNEL_ID: "23566"
+      SYNC_NOT_BEFORE: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_not_before || '2026-08-23' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'false' }}
+      MAX_EPISODES_PER_RUN: "10"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Sync YouTube sermons
+        run: npm run sync

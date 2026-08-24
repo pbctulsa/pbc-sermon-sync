@@ -1,0 +1,14 @@
+{
+  "name": "pbc-sermon-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check scripts/sync-youtube-sermons.js",
+    "sync": "node scripts/sync-youtube-sermons.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
