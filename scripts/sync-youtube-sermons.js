@@ -567,7 +567,13 @@ export function parsePodcastFeed(xml) {
 
 export function findPodcastSourceAudioUrl(title, podcastEpisodes) {
   const wanted = normalizeTitleForMatching(title);
-  return podcastEpisodes.find((episode) => normalizeTitleForMatching(episode.title) === wanted)?.audioUrl || null;
+  const exact = podcastEpisodes.find((episode) => normalizeTitleForMatching(episode.title) === wanted);
+  if (exact) return exact.audioUrl;
+
+  const closest = podcastEpisodes
+    .map((episode) => ({ episode, distance: levenshteinDistance(wanted, normalizeTitleForMatching(episode.title)) }))
+    .sort((left, right) => left.distance - right.distance)[0];
+  return closest && closest.distance <= 2 ? closest.episode.audioUrl : null;
 }
 
 function normalizeTitleForMatching(title) {
@@ -577,6 +583,21 @@ function normalizeTitleForMatching(title) {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+function levenshteinDistance(left, right) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitution = previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
+      current[rightIndex] = Math.min(previous[rightIndex] + 1, current[rightIndex - 1] + 1, substitution);
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length];
 }
 
 export function hasEpisodeAudio(attributes = {}) {

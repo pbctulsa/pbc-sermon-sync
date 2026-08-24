@@ -60,6 +60,7 @@ test("parsePodcastFeed extracts enclosure URLs and matches normalized titles", (
 
   assert.deepEqual(episodes, [{ title: "God’s Grace | Aug 2", audioUrl: "https://example.com/sermon.mp3" }]);
   assert.equal(findPodcastSourceAudioUrl(" God's Grace  | Aug 2 ", episodes), "https://example.com/sermon.mp3");
+  assert.equal(findPodcastSourceAudioUrl("God's Graca | Aug 2", episodes), "https://example.com/sermon.mp3");
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {
