@@ -29,6 +29,7 @@ on:
 
 jobs:
   sync:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.SERMON_SYNC_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     env:
       PC_CLIENTID: ${{ secrets.PC_CLIENTID }}

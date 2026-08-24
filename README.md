@@ -22,6 +22,10 @@ Add these secrets under **Settings → Secrets and variables → Actions**:
 
 The Planning Center user associated with the token must have access to Publishing.
 
+Scheduled runs remain disabled until testing is complete. To enable them, create this repository variable:
+
+- `SERMON_SYNC_ENABLED`: set to `true`
+
 ## Safe First Run
 
 1. Open **Actions → YouTube Sermon Sync → Run workflow**.
@@ -29,6 +33,7 @@ The Planning Center user associated with the token must have access to Publishin
 3. Leave `publish` set to `false`.
 4. Review the workflow log showing what would be created.
 5. Run it again with `dry_run` set to `false` to create drafts.
+6. After confirming the draft looks correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
 
 Set `publish` to `true` only when new episodes should immediately appear in Church Center.
 
