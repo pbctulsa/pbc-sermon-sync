@@ -18,6 +18,7 @@ const env = {
   youtubeApiKey: process.env.YOUTUBE_API_KEY,
   youtubePlaylistId: process.env.YOUTUBE_PLAYLIST_ID,
   podcastSourceFeedUrl: process.env.PODCAST_SOURCE_FEED_URL || null,
+  allowYouTubeAudioFallback: isTruthy(process.env.ALLOW_YOUTUBE_AUDIO_FALLBACK),
   planningCenterChannelId: process.env.PC_SERMON_CHANNEL_ID,
   syncAfterVideoId: process.env.SYNC_AFTER_VIDEO_ID || null,
   syncNotBefore: process.env.SYNC_NOT_BEFORE || null,
@@ -81,7 +82,7 @@ async function main() {
     : [];
   const allPodcastAudioUpdates = missingPodcastAudioUpdates.flatMap((update) => {
     const sourceAudioUrl = findPodcastSourceAudioUrl(update.video.title, podcastSourceEpisodes);
-    if (env.podcastSourceFeedUrl && !sourceAudioUrl) return [];
+    if (env.podcastSourceFeedUrl && !sourceAudioUrl && !env.allowYouTubeAudioFallback) return [];
     return [{ ...update, sourceAudioUrl }];
   });
   const unmatchedPodcastAudioCount = missingPodcastAudioUpdates.length - allPodcastAudioUpdates.length;
@@ -203,7 +204,7 @@ async function main() {
     const audioUploadId = env.syncPodcastAudio
       ? sourceAudioUrl
         ? await uploadRemotePodcastAudio(video, sourceAudioUrl)
-        : env.podcastSourceFeedUrl
+        : env.podcastSourceFeedUrl && !env.allowYouTubeAudioFallback
           ? null
           : await uploadYouTubeAudio(video)
       : null;
@@ -356,11 +357,8 @@ async function uploadYouTubeAudio(video) {
       [
         "--no-playlist",
         "--no-progress",
-        "--extract-audio",
-        "--audio-format",
-        "mp3",
-        "--audio-quality",
-        "5",
+        "--format",
+        "bestaudio[ext=m4a]",
         "--js-runtimes",
         "node",
         "--remote-components",
@@ -372,12 +370,12 @@ async function uploadYouTubeAudio(video) {
       { maxBuffer: 10 * 1024 * 1024 },
     );
 
-    const audioFilename = (await readdir(downloadDirectory)).find((filename) => filename.endsWith(".mp3"));
-    if (!audioFilename) throw new Error(`yt-dlp did not produce an MP3 file for ${video.id}.`);
+    const audioFilename = (await readdir(downloadDirectory)).find((filename) => filename.endsWith(".m4a"));
+    if (!audioFilename) throw new Error(`yt-dlp did not produce an M4A file for ${video.id}.`);
 
     const audio = await readFile(join(downloadDirectory, audioFilename));
     const form = new FormData();
-    form.append("file", new Blob([audio], { type: "audio/mpeg" }), `${video.id}.mp3`);
+    form.append("file", new Blob([audio], { type: "audio/mp4" }), `${video.id}.m4a`);
 
     const response = await planningCenterRequest(PLANNING_CENTER_UPLOAD_URL, {
       method: "POST",

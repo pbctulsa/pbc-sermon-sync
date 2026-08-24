@@ -40,6 +40,22 @@ on:
         required: true
         default: "5"
         type: string
+      allow_youtube_audio_fallback:
+        description: "Use YouTube when migration feed audio is unavailable"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      audio_runner:
+        description: "Runner for this test (macOS can avoid YouTube server blocking)"
+        required: true
+        default: "ubuntu"
+        type: choice
+        options:
+          - "ubuntu"
+          - "macos"
       sync_after_video_id:
         description: "Only sync videos added after this YouTube video ID"
         required: true
@@ -69,7 +85,7 @@ on:
 jobs:
   sync:
     if: ${{ github.event_name == 'workflow_dispatch' || vars.SERMON_SYNC_ENABLED == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.audio_runner == 'macos' && 'macos-latest' || vars.SERMON_SYNC_RUNNER || 'ubuntu-latest' }}
     env:
       PC_CLIENTID: ${{ secrets.PC_CLIENTID }}
       PC_SECRET: ${{ secrets.PC_SECRET }}
@@ -84,6 +100,7 @@ jobs:
       AUDIO_BACKFILL_ALL_PLAYLIST: ${{ github.event_name == 'workflow_dispatch' && inputs.audio_backfill_all_playlist || 'false' }}
       MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
       MAX_PODCAST_AUDIO_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_podcast_audio_per_run || '5' }}
+      ALLOW_YOUTUBE_AUDIO_FALLBACK: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_youtube_audio_fallback || 'false' }}
       EXCLUDED_TITLES: Sunday Service
       FORCE_THUMBNAIL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_thumbnail_backfill || 'false' }}
       THUMBNAIL_EPISODE_ID_MIN: ${{ github.event_name == 'workflow_dispatch' && inputs.thumbnail_episode_id_min || '' }}

@@ -47,6 +47,8 @@ Use the manual `force_thumbnail_backfill` option only when existing episode artw
 
 Use `audio_backfill_all_playlist=true` for the podcast migration only. It searches the entire YouTube playlist for matching Planning Center episodes, including sermons before the normal video sync boundary. `max_podcast_audio_per_run` limits each reviewed batch; scheduled runs process up to five missing files and new weekly sermons normally require only one.
 
+`allow_youtube_audio_fallback` is disabled by default. Enable it only for a reviewed run when a sermon is absent from the migration feed. The workflow requests the original M4A audio without re-encoding.
+
 ## Local Preview
 
 ```bash
