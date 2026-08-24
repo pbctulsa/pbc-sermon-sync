@@ -1,9 +1,15 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/playlistItems";
 const PLANNING_CENTER_API_URL = "https://api.planningcenteronline.com/publishing/v2";
 const PLANNING_CENTER_UPLOAD_URL = "https://upload.planningcenteronline.com/v2/files";
+const execFileAsync = promisify(execFile);
 
 const env = {
   planningCenterClientId: process.env.PC_CLIENTID,
@@ -15,6 +21,8 @@ const env = {
   syncNotBefore: process.env.SYNC_NOT_BEFORE || null,
   dryRun: isTruthy(process.env.DRY_RUN),
   publishEpisodes: isTruthy(process.env.PUBLISH_EPISODES),
+  syncPodcastAudio: isTruthy(process.env.SYNC_PODCAST_AUDIO),
+  audioBackfillAllPlaylist: isTruthy(process.env.AUDIO_BACKFILL_ALL_PLAYLIST),
   forceThumbnailBackfill: isTruthy(process.env.FORCE_THUMBNAIL_BACKFILL),
   thumbnailEpisodeIdMin: process.env.THUMBNAIL_EPISODE_ID_MIN
     ? Number.parseInt(process.env.THUMBNAIL_EPISODE_ID_MIN, 10)
@@ -57,9 +65,29 @@ async function main() {
     env.thumbnailEpisodeIdMin,
   );
   const videoUrlUpdates = findOnDemandVideoUrlUpdates(videos, existingEpisodes);
+  const podcastAudioUpdates = env.syncPodcastAudio
+    ? findPodcastAudioUpdates(env.audioBackfillAllPlaylist ? normalizedVideos : videos, existingEpisodes)
+    : [];
 
   console.log(`Checked ${playlistItems.length} YouTube playlist item(s).`);
   console.log(`Found ${existingEpisodes.length} episode(s) in Planning Center channel ${channel.attributes?.name || channel.id}.`);
+
+  if (env.syncPodcastAudio && !channel.attributes?.enable_audio) {
+    if (env.dryRun) {
+      console.log("[dry run] Would enable audio on the Planning Center sermon channel.");
+    } else {
+      await enablePlanningCenterChannelAudio(channel.id);
+      console.log("Enabled audio on the Planning Center sermon channel.");
+    }
+  }
+
+  if (env.syncPodcastAudio) {
+    console.log(
+      channel.attributes?.podcast_feed_url
+        ? `Planning Center podcast feed: ${channel.attributes.podcast_feed_url}`
+        : "Planning Center podcast feed settings still need to be completed before migrating from Buzzsprout.",
+    );
+  }
 
   if (env.syncAfterVideoId) {
     console.log(`Only syncing videos added to the playlist after YouTube video ${env.syncAfterVideoId}.`);
@@ -67,7 +95,12 @@ async function main() {
     console.log(`Only syncing videos added to the playlist on or after ${new Date(env.syncNotBefore).toISOString()}.`);
   }
 
-  if (missingVideos.length === 0 && thumbnailUpdates.length === 0 && videoUrlUpdates.length === 0) {
+  if (
+    missingVideos.length === 0 &&
+    thumbnailUpdates.length === 0 &&
+    videoUrlUpdates.length === 0 &&
+    podcastAudioUpdates.length === 0
+  ) {
     console.log("Planning Center is already up to date.");
     return;
   }
@@ -75,8 +108,11 @@ async function main() {
   if (missingVideos.length > 0) console.log(`Found ${missingVideos.length} new sermon video(s).`);
   if (thumbnailUpdates.length > 0) console.log(`Found ${thumbnailUpdates.length} episode thumbnail(s) to add.`);
   if (videoUrlUpdates.length > 0) console.log(`Found ${videoUrlUpdates.length} on-demand video URL(s) to add.`);
+  if (podcastAudioUpdates.length > 0) {
+    console.log(`Found ${podcastAudioUpdates.length} episode podcast audio file(s) to add.`);
+  }
 
-  const totalChanges = missingVideos.length + thumbnailUpdates.length + videoUrlUpdates.length;
+  const totalChanges = missingVideos.length + thumbnailUpdates.length + videoUrlUpdates.length + podcastAudioUpdates.length;
   if (!env.dryRun && totalChanges > env.maxEpisodesPerRun) {
     throw new Error(
       `Refusing to make ${totalChanges} episode changes in one run. ` +
@@ -105,6 +141,17 @@ async function main() {
     console.log(`Added on-demand video URL to episode ${episode.id}: ${video.title}`);
   }
 
+  for (const { video, episode } of podcastAudioUpdates) {
+    if (env.dryRun) {
+      console.log(`[dry run] Would add podcast audio to episode ${episode.id}: ${video.title}`);
+      continue;
+    }
+
+    const uploadId = await uploadYouTubeAudio(video);
+    await updatePlanningCenterEpisodeAudio(episode.id, uploadId);
+    console.log(`Added podcast audio to episode ${episode.id}: ${video.title}`);
+  }
+
   for (const video of missingVideos) {
     if (env.dryRun) {
       console.log(`[dry run] Would create: ${video.title} (${video.url})`);
@@ -112,7 +159,8 @@ async function main() {
     }
 
     const uploadId = video.thumbnailUrl ? await uploadYouTubeThumbnail(video) : null;
-    const episode = await createPlanningCenterEpisode(video, uploadId);
+    const audioUploadId = env.syncPodcastAudio ? await uploadYouTubeAudio(video) : null;
+    const episode = await createPlanningCenterEpisode(video, uploadId, audioUploadId);
     const status = env.publishEpisodes ? "published" : "draft";
     console.log(`Created ${status} episode ${episode.id}: ${video.title}`);
   }
@@ -189,14 +237,73 @@ async function fetchPlanningCenterEpisodes() {
   return episodes;
 }
 
-async function createPlanningCenterEpisode(video, uploadId) {
+async function enablePlanningCenterChannelAudio(channelId) {
+  const response = await planningCenterRequest(`/channels/${channelId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({
+      data: {
+        type: "Channel",
+        id: String(channelId),
+        attributes: { enable_audio: true },
+      },
+    }),
+  });
+  await parseResponse(response, "Planning Center channel audio update");
+}
+
+async function createPlanningCenterEpisode(video, uploadId, audioUploadId) {
   const response = await planningCenterRequest("/episodes", {
     method: "POST",
     headers: { "Content-Type": "application/vnd.api+json" },
-    body: JSON.stringify(buildEpisodePayload(video, env.planningCenterChannelId, env.publishEpisodes, uploadId)),
+    body: JSON.stringify(
+      buildEpisodePayload(video, env.planningCenterChannelId, env.publishEpisodes, uploadId, audioUploadId),
+    ),
   });
   const body = await parseResponse(response, "Planning Center episode creation");
   return body.data;
+}
+
+async function uploadYouTubeAudio(video) {
+  const downloadDirectory = await mkdtemp(join(tmpdir(), "pbc-sermon-audio-"));
+
+  try {
+    const outputTemplate = join(downloadDirectory, `${video.id}.%(ext)s`);
+    await execFileAsync(
+      "yt-dlp",
+      [
+        "--no-playlist",
+        "--no-progress",
+        "--extract-audio",
+        "--audio-format",
+        "mp3",
+        "--audio-quality",
+        "5",
+        "--output",
+        outputTemplate,
+        video.url,
+      ],
+      { maxBuffer: 10 * 1024 * 1024 },
+    );
+
+    const audioFilename = (await readdir(downloadDirectory)).find((filename) => filename.endsWith(".mp3"));
+    if (!audioFilename) throw new Error(`yt-dlp did not produce an MP3 file for ${video.id}.`);
+
+    const audio = await readFile(join(downloadDirectory, audioFilename));
+    const form = new FormData();
+    form.append("file", new Blob([audio], { type: "audio/mpeg" }), `${video.id}.mp3`);
+
+    const response = await planningCenterRequest(PLANNING_CENTER_UPLOAD_URL, {
+      method: "POST",
+      body: form,
+    });
+    const body = await parseResponse(response, "Planning Center sermon audio upload");
+    const uploadId = body.data?.[0]?.id;
+    if (!uploadId) throw new Error(`Planning Center did not return an audio upload ID for ${video.id}.`);
+    return uploadId;
+  } finally {
+    await rm(downloadDirectory, { recursive: true, force: true });
+  }
 }
 
 async function uploadYouTubeThumbnail(video) {
@@ -247,6 +354,21 @@ async function updatePlanningCenterEpisodeOnDemandUrl(episodeId, videoUrl) {
     }),
   });
   await parseResponse(response, "Planning Center on-demand video URL update");
+}
+
+async function updatePlanningCenterEpisodeAudio(episodeId, uploadId) {
+  const response = await planningCenterRequest(`/episodes/${episodeId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/vnd.api+json" },
+    body: JSON.stringify({
+      data: {
+        type: "Episode",
+        id: String(episodeId),
+        attributes: { sermon_audio: uploadId },
+      },
+    }),
+  });
+  await parseResponse(response, "Planning Center episode sermon audio update");
 }
 
 function planningCenterRequest(pathOrUrl, options = {}) {
@@ -367,6 +489,30 @@ export function findOnDemandVideoUrlUpdates(videos, episodes) {
   });
 }
 
+export function findPodcastAudioUpdates(videos, episodes) {
+  const videoById = new Map(videos.map((video) => [video.id, video]));
+
+  return episodes.flatMap((episode) => {
+    const attributes = episode.attributes || {};
+    if (hasEpisodeAudio(attributes)) return [];
+
+    const videoId = [attributes.library_video_url, attributes.video_url]
+      .map(extractYouTubeVideoId)
+      .find(Boolean);
+    const video = videoById.get(videoId);
+    return video ? [{ video, episode }] : [];
+  });
+}
+
+export function hasEpisodeAudio(attributes = {}) {
+  if (typeof attributes.library_audio_url === "string" && attributes.library_audio_url.length > 0) return true;
+  const audio = attributes.sermon_audio;
+  if (!audio) return false;
+  if (typeof audio === "string") return audio.length > 0;
+  if (typeof audio !== "object") return false;
+  return Object.values(audio).some(Boolean);
+}
+
 export function hasEpisodeArt(art) {
   if (!art) return false;
   if (typeof art === "string") return art.length > 0;
@@ -390,7 +536,7 @@ export function extractYouTubeVideoId(value) {
   return null;
 }
 
-export function buildEpisodePayload(video, channelId, publish, uploadId = null) {
+export function buildEpisodePayload(video, channelId, publish, uploadId = null, audioUploadId = null) {
   return {
     data: {
       type: "Episode",
@@ -401,6 +547,7 @@ export function buildEpisodePayload(video, channelId, publish, uploadId = null) 
         library_video_url: video.url,
         published_to_library_at: publish ? video.publishedAt || new Date().toISOString() : null,
         ...(uploadId ? { art: uploadId } : {}),
+        ...(audioUploadId ? { sermon_audio: audioUploadId } : {}),
       },
       relationships: {
         channel: {

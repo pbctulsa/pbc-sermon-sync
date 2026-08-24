@@ -19,6 +19,22 @@ on:
         options:
           - "false"
           - "true"
+      sync_podcast_audio:
+        description: "Create and attach podcast audio from each YouTube sermon"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      audio_backfill_all_playlist:
+        description: "Find missing audio for all matching playlist episodes, including before the sync boundary"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
       sync_after_video_id:
         description: "Only sync videos added after this YouTube video ID"
         required: true
@@ -58,6 +74,8 @@ jobs:
       SYNC_AFTER_VIDEO_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_after_video_id || 'uZGwiTyVMUU' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
       PUBLISH_EPISODES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || 'true' }}
+      SYNC_PODCAST_AUDIO: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_podcast_audio || 'true' }}
+      AUDIO_BACKFILL_ALL_PLAYLIST: ${{ github.event_name == 'workflow_dispatch' && inputs.audio_backfill_all_playlist || 'false' }}
       MAX_EPISODES_PER_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.max_episodes_per_run || '10' }}
       EXCLUDED_TITLES: Sunday Service
       FORCE_THUMBNAIL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_thumbnail_backfill || 'false' }}
@@ -71,6 +89,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Set up Python for podcast audio
+        if: env.SYNC_PODCAST_AUDIO == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install podcast audio tools
+        if: env.SYNC_PODCAST_AUDIO == 'true'
+        run: python -m pip install --disable-pip-version-check "yt-dlp==2026.8.19"
       - name: Install dependencies
         run: npm ci
       - name: Sync YouTube sermons

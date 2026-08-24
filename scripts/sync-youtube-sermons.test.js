@@ -6,7 +6,9 @@ import {
   filterVideosForSync,
   findMissingVideos,
   findOnDemandVideoUrlUpdates,
+  findPodcastAudioUpdates,
   findThumbnailUpdates,
+  hasEpisodeAudio,
   hasEpisodeArt,
   normalizeYouTubeItem,
 } from "./sync-youtube-sermons.js";
@@ -24,6 +26,18 @@ test("findOnDemandVideoUrlUpdates finds imported episodes missing their library 
   const complete = { id: "2", attributes: { video_url: video.url, library_video_url: video.url } };
 
   assert.deepEqual(findOnDemandVideoUrlUpdates([video], [missing, complete]), [{ video, episode: missing }]);
+});
+
+test("findPodcastAudioUpdates finds matching episodes without audio", () => {
+  const video = { id: "video123", url: "https://www.youtube.com/watch?v=video123" };
+  const missing = { id: "1", attributes: { library_video_url: video.url, sermon_audio: {} } };
+  const uploaded = { id: "2", attributes: { library_video_url: video.url, sermon_audio: { filename: "sermon.mp3" } } };
+  const linked = { id: "3", attributes: { library_video_url: video.url, library_audio_url: "https://example.com/a.mp3" } };
+
+  assert.deepEqual(findPodcastAudioUpdates([video], [missing, uploaded, linked]), [{ video, episode: missing }]);
+  assert.equal(hasEpisodeAudio(uploaded.attributes), true);
+  assert.equal(hasEpisodeAudio(linked.attributes), true);
+  assert.equal(hasEpisodeAudio(missing.attributes), false);
 });
 
 test("normalizeYouTubeItem skips unavailable videos", () => {
@@ -112,4 +126,7 @@ test("buildEpisodePayload creates a draft unless publishing is enabled", () => {
 
   const thumbnailPayload = buildEpisodePayload(video, "23566", true, "upload-123");
   assert.equal(thumbnailPayload.data.attributes.art, "upload-123");
+
+  const audioPayload = buildEpisodePayload(video, "23566", true, "upload-123", "audio-upload-123");
+  assert.equal(audioPayload.data.attributes.sermon_audio, "audio-upload-123");
 });

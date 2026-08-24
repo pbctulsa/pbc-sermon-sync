@@ -10,7 +10,7 @@ Automatically creates Planning Center sermon episodes from new videos added to P
 - Scheduled behavior: publish new episodes to Church Center
 - Starting point: only videos added to the playlist after YouTube video `uZGwiTyVMUU`
 
-The sync copies each video's title, description, on-demand YouTube URL, publication date, and thumbnail. Planning Center requires artwork to be uploaded first, so the workflow downloads each YouTube thumbnail and stores it as the episode artwork. It matches existing episodes by YouTube video ID, making repeated runs safe.
+The sync copies each video's title, description, on-demand YouTube URL, publication date, thumbnail, and podcast audio. Planning Center requires artwork and audio files to be uploaded first, so the workflow downloads the YouTube thumbnail, extracts an MP3 from the church-owned sermon video, and stores both on the episode. It matches existing episodes by YouTube video ID and skips episodes that already have audio, making repeated runs safe.
 
 Videos titled exactly `Sunday Service` are excluded from synchronization.
 
@@ -34,15 +34,18 @@ Scheduled runs remain disabled until testing is complete. To enable them, create
 2. Leave `dry_run` set to `true`.
 3. Set `publish` to `true` (dry-run mode still prevents changes).
 4. Leave `max_episodes_per_run` at `10` for normal runs; increase it deliberately for the initial backfill.
-5. Review the workflow log showing what would be created.
-6. Run it again with `dry_run` set to `false` and `publish` set to `true` to publish the missing episodes.
-7. After confirming they look correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
+5. Leave `sync_podcast_audio` set to `true`. Enable `audio_backfill_all_playlist` only for a controlled historical backfill.
+6. Review the workflow log showing what would be created or updated.
+7. Run it again with `dry_run` set to `false` and `publish` set to `true` to publish the missing episodes and audio.
+8. After confirming they look correct in Planning Center, add the `SERMON_SYNC_ENABLED` repository variable with a value of `true`.
 
 Set `publish` to `true` only when new episodes should immediately appear in Church Center.
 
 The workflow refuses to create more than 10 episodes in one run. Change the boundary video or `MAX_EPISODES_PER_RUN` deliberately for a larger historical import.
 
 Use the manual `force_thumbnail_backfill` option only when existing episode artwork needs to be replaced with YouTube thumbnails. Scheduled runs leave it disabled.
+
+Use `audio_backfill_all_playlist=true` for the podcast migration only. It searches the entire YouTube playlist for matching Planning Center episodes, including sermons before the normal video sync boundary. The normal safety limit still applies, so backfill in reviewed batches.
 
 ## Local Preview
 
